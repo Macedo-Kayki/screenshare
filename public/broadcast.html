@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ScreenShare — Transmitindo</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="bg-animated"></div>
+
+  <div class="broadcast-layout fade-in">
+    <!-- Video Area -->
+    <div class="video-area">
+      <div class="video-container" id="video-container">
+        <div class="video-overlay">
+          <span class="badge badge-live" id="live-badge" style="display:none;">
+            <span class="dot"></span> AO VIVO
+          </span>
+          <span class="badge badge-quality" id="quality-badge" style="display:none;"></span>
+        </div>
+
+        <div class="video-placeholder" id="placeholder">
+          <div class="icon">🖥️</div>
+          <p>Clique em <strong>"Iniciar Transmissão"</strong> para compartilhar sua tela</p>
+        </div>
+
+        <video id="preview" autoplay muted playsinline style="display:none;"></video>
+      </div>
+
+      <div class="video-controls">
+        <div class="controls-left">
+          <button class="btn btn-primary btn-sm" id="btn-start" onclick="startBroadcast()">
+            📡 Iniciar Transmissão
+          </button>
+          <button class="btn btn-danger btn-sm" id="btn-stop" onclick="stopBroadcast()" style="display:none;">
+            ⏹️ Parar
+          </button>
+        </div>
+        <div class="controls-right">
+          <button class="btn-icon" id="btn-fullscreen" onclick="toggleFullscreen()" title="Tela cheia">⛶</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <!-- Room Code -->
+      <div class="sidebar-section">
+        <h3>Código da Sala</h3>
+        <div class="room-code-display">
+          <span class="room-code-text" id="room-code">------</span>
+          <button class="copy-btn" onclick="copyRoomCode()" title="Copiar código">📋</button>
+        </div>
+      </div>
+
+      <!-- Quality Settings -->
+      <div class="sidebar-section">
+        <h3>Qualidade</h3>
+
+        <div class="settings-group">
+          <div class="settings-label">Resolução</div>
+          <div class="toggle-group" id="resolution-toggle">
+            <button class="toggle-option" data-value="480p" onclick="setResolution('480p')">480p</button>
+            <button class="toggle-option active" data-value="720p" onclick="setResolution('720p')">720p</button>
+            <button class="toggle-option" data-value="1080p" onclick="setResolution('1080p')">1080p</button>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-label">Frames por segundo</div>
+          <div class="toggle-group" id="fps-toggle">
+            <button class="toggle-option active" data-value="30" onclick="setFPS(30)">30 FPS</button>
+            <button class="toggle-option" data-value="60" onclick="setFPS(60)">60 FPS</button>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-label">Qualidade de conexão</div>
+          <div class="toggle-group" id="bitrate-toggle">
+            <button class="toggle-option" data-value="low" onclick="setBitrate('low')">Baixa</button>
+            <button class="toggle-option active" data-value="medium" onclick="setBitrate('medium')">Média</button>
+            <button class="toggle-option" data-value="high" onclick="setBitrate('high')">Alta</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Viewers -->
+      <div class="sidebar-section" style="flex:1; display:flex; flex-direction:column;">
+        <h3>Espectadores</h3>
+        <div class="viewer-count" id="viewer-count">0 espectadores</div>
+        <ul class="user-list" id="user-list"></ul>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/broadcast.js"></script>
+</body>
+</html>

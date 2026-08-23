@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ScreenShare — Assistindo</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body style="overflow: hidden;">
+  <div class="watch-layout" id="watch-layout">
+    <!-- Waiting screen -->
+    <div class="waiting-screen" id="waiting-screen">
+      <div class="spinner"></div>
+      <p>Conectando à transmissão...</p>
+      <p style="font-size: 13px; color: var(--text-muted);" id="waiting-msg">Aguardando o broadcaster</p>
+    </div>
+
+    <!-- Video -->
+    <div class="watch-video-container" id="video-wrapper" style="display: none;">
+      <video id="remote-video" autoplay playsinline></video>
+    </div>
+
+    <!-- Top info -->
+    <div class="watch-info" id="watch-info">
+      <span class="badge badge-live">
+        <span class="dot"></span> AO VIVO
+      </span>
+      <span class="broadcaster-name" id="broadcaster-label"></span>
+      <span class="badge badge-quality" id="quality-info"></span>
+    </div>
+
+    <!-- Bottom controls -->
+    <div class="watch-controls" id="watch-controls">
+      <div class="watch-controls-left">
+        <button class="btn-icon" id="btn-mute" onclick="toggleMute()" title="Mudo">🔊</button>
+        <div class="volume-control">
+          <input type="range" class="volume-slider" id="volume-slider" min="0" max="100" value="100" oninput="setVolume(this.value)">
+          <span class="volume-value" id="volume-value">100%</span>
+        </div>
+      </div>
+      <div class="watch-controls-right">
+        <button class="btn-icon" id="btn-pip" onclick="togglePiP()" title="Picture-in-Picture">🖼️</button>
+        <button class="btn-icon" id="btn-fullscreen" onclick="toggleFullscreen()" title="Tela cheia">⛶</button>
+        <button class="btn-icon" id="btn-users" onclick="toggleSidebar()" title="Espectadores">👥</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="watch-sidebar" id="watch-sidebar">
+    <div class="sidebar-header">
+      <h2>Na sala</h2>
+      <button class="sidebar-close" onclick="toggleSidebar()">✕</button>
+    </div>
+    <div class="viewer-count" id="viewer-count">0 espectadores</div>
+    <ul class="user-list" id="user-list"></ul>
+  </div>
+
+  <!-- Broadcaster ended overlay -->
+  <div id="ended-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:50; display:none;">
+    <div class="page-center">
+      <div class="glass-card" style="text-align:center; max-width:400px;">
+        <div style="font-size:48px; margin-bottom:16px;">📡</div>
+        <h2 style="margin-bottom:8px;">Transmissão encerrada</h2>
+        <p style="color:var(--text-secondary); margin-bottom:24px;">O broadcaster encerrou a transmissão.</p>
+        <a href="/" class="btn btn-primary">← Voltar ao início</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/watch.js"></script>
+</body>
+</html>
