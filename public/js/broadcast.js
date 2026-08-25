@@ -52,7 +52,13 @@ async function startBroadcast() {
         height: { ideal: res.height },
         frameRate: { ideal: currentSettings.fps }
       },
-      audio: true,
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        sampleRate: 48000,
+        channelCount: 2 // Request stereo audio
+      },
       // Prefer sharing a tab to get audio by default
       preferCurrentTab: false,
       selfBrowserSurface: 'include',
@@ -64,17 +70,7 @@ async function startBroadcast() {
     const hasDisplayAudio = stream.getAudioTracks().length > 0;
 
     if (hasDisplayAudio) {
-      // Optimize audio track for quality
-      const audioTrack = stream.getAudioTracks()[0];
-      try {
-        await audioTrack.applyConstraints({
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          sampleRate: 48000
-        });
-      } catch(e) {}
-      showToast('Tela + áudio capturados!', '🔊');
+      showToast('Tela + áudio capturados em alta qualidade!', '🔊');
     } else {
       // No audio from display — try to capture system audio separately
       showToast('Áudio do sistema não disponível. Compartilhe uma aba do Chrome para incluir áudio.', '⚠️');
@@ -193,7 +189,17 @@ async function applyBitrateToConnection(pc) {
       try {
         await sender.setParameters(params);
       } catch (e) {
-        console.warn('Could not set bitrate:', e);
+        console.warn('Could not set video bitrate:', e);
+      }
+    }
+    if (sender.track && sender.track.kind === 'audio') {
+      const params = sender.getParameters();
+      if (!params.encodings) params.encodings = [{}];
+      params.encodings[0].maxBitrate = 256000; // 256 kbps for high quality stereo audio
+      try {
+        await sender.setParameters(params);
+      } catch (e) {
+        console.warn('Could not set audio bitrate:', e);
       }
     }
   });
