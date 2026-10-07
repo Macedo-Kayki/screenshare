@@ -5,25 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Compartilhe sua tela em tempo real com qualidade e sem lag.">
   <title>ScreenShare — Transmissão de Tela em Tempo Real</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%96%A5%EF%B8%8F%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
   <div class="bg-animated"></div>
 
-  <div class="page-center">
+  <main class="page-center">
     <div class="glass-card index-card fade-in">
       <div class="logo">
-        <div class="logo-icon">🖥️</div>
-        <span class="logo-text">ScreenShare</span>
+        <div class="logo-icon" aria-hidden="true">🖥️</div>
+        <h1 class="logo-text">ScreenShare</h1>
       </div>
       <p class="subtitle">Transmita sua tela em tempo real, com áudio e sem lag.</p>
 
+      <p class="invite-banner" id="invite-banner" hidden>
+        Você foi convidado para a sala <strong id="invite-code"></strong>. Digite seu nome para entrar.
+      </p>
+
       <div class="input-group">
         <label for="username">Seu nome</label>
-        <input type="text" id="username" class="input" placeholder="Digite seu nome..." maxlength="30" autocomplete="off">
+        <input type="text" id="username" class="input" placeholder="Digite seu nome..." maxlength="30" autocomplete="nickname">
       </div>
 
-      <button id="btn-create" class="btn btn-primary btn-block" onclick="createRoom()">
+      <button id="btn-create" class="btn btn-primary btn-block" type="button">
         📡 Iniciar Transmissão
       </button>
 
@@ -31,80 +36,17 @@
 
       <div class="input-group">
         <label for="room-code">Código da sala</label>
-        <input type="text" id="room-code" class="input" placeholder="Ex: ABC123" maxlength="6" style="text-transform: uppercase; letter-spacing: 2px; text-align: center; font-weight: 600;" autocomplete="off">
+        <input type="text" id="room-code" class="input input-code" placeholder="Ex: ABC123" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false">
       </div>
 
-      <button id="btn-join" class="btn btn-secondary btn-block" onclick="joinRoom()">
+      <button id="btn-join" class="btn btn-secondary btn-block" type="button">
         👁️ Entrar na Sala
       </button>
     </div>
-  </div>
+  </main>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script>
-    const socket = io();
-
-    // Auto-focus username
-    document.getElementById('username').focus();
-
-    // Enter key behavior
-    document.getElementById('username').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') document.getElementById('room-code').focus();
-    });
-
-    document.getElementById('room-code').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') joinRoom();
-    });
-
-    // Force uppercase on room code
-    document.getElementById('room-code').addEventListener('input', (e) => {
-      e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    });
-
-    function getName() {
-      const name = document.getElementById('username').value.trim();
-      if (!name) {
-        document.getElementById('username').focus();
-        document.getElementById('username').style.borderColor = '#ef4444';
-        setTimeout(() => {
-          document.getElementById('username').style.borderColor = '';
-        }, 2000);
-        return null;
-      }
-      return name;
-    }
-
-    function createRoom() {
-      const name = getName();
-      if (!name) return;
-
-      const btn = document.getElementById('btn-create');
-      btn.disabled = true;
-      btn.innerHTML = '<div class="spinner" style="width:20px;height:20px;border-width:2px;"></div> Criando...';
-
-      socket.emit('create-room', { name }, (response) => {
-        if (response.roomId) {
-          window.location.href = `/broadcast.html?room=${response.roomId}&name=${encodeURIComponent(name)}`;
-        }
-      });
-    }
-
-    function joinRoom() {
-      const name = getName();
-      if (!name) return;
-
-      const code = document.getElementById('room-code').value.trim();
-      if (!code) {
-        document.getElementById('room-code').focus();
-        document.getElementById('room-code').style.borderColor = '#ef4444';
-        setTimeout(() => {
-          document.getElementById('room-code').style.borderColor = '';
-        }, 2000);
-        return;
-      }
-
-      window.location.href = `/watch.html?room=${code}&name=${encodeURIComponent(name)}`;
-    }
-  </script>
+  <script src="/js/common.js"></script>
+  <script src="/js/index.js"></script>
 </body>
 </html>

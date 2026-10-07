@@ -1,24 +1,40 @@
 // ===== BROADCASTER LOGIC =====
 
 const params = new URLSearchParams(window.location.search);
-const roomId = params.get('room');
+const roomId = (params.get('room') || '').toUpperCase();
 const userName = params.get('name') || 'Broadcaster';
 
-if (!roomId) {
-  window.location.href = '/';
+const isValidRoom = /^[A-Z0-9]{6}$/.test(roomId);
+if (!isValidRoom) {
+  window.location.replace('/');
 }
 
-const socket = io();
+// Token da sala: sessionStorage (padrão) ou hash da URL (fallback sem storage)
+const tokenKey = `ss-token-${roomId}`;
+let roomToken = storageGet('sessionStorage', tokenKey);
+const hashToken = new URLSearchParams(window.location.hash.slice(1)).get('token');
+if (hashToken) {
+  roomToken = hashToken;
+  storageSet('sessionStorage', tokenKey, hashToken);
+  history.replaceState(null, '', window.location.pathname + window.location.search);
+}
+
+const socket = io({ autoConnect: false });
+
+const STATS_INTERVAL = 2000;
+const DISCONNECT_GRACE = 5000;
+const MAX_RETRIES = 5;
 
 // State
 let stream = null;
-let peerConnections = new Map();
-let viewers = new Set(); // Track all viewer IDs
-let currentSettings = {
-  resolution: '720p',
-  fps: 30,
-  bitrate: 'medium'
-};
+// viewerId -> { pc, session, pendingCandidates, disconnectTimer, createdAt, lastBytes, lastTimestamp, statsText }
+const peers = new Map();
+const viewers = new Set(); // Track all viewer IDs
+const retries = new Map();
+let sessionCounter = 0;
+let maxViewers = null;
+let isFatal = false;
+let currentSettings = loadSettings();
 
 // DOM refs
 const preview = document.getElementById('preview');
@@ -34,23 +50,83 @@ const viewerCountEl = document.getElementById('viewer-count');
 // Set room code
 roomCodeEl.textContent = roomId;
 
-// Update quality badge
-function updateQualityBadge() {
-  qualityBadge.textContent = `${currentSettings.resolution} · ${currentSettings.fps}fps · ${QUALITY_PRESETS[currentSettings.bitrate].label}`;
-  qualityBadge.style.display = '';
+// ===== SETTINGS =====
+function loadSettings() {
+  const defaults = { resolution: '720p', fps: 30, bitrate: 'medium', content: 'detail' };
+  try {
+    const saved = JSON.parse(storageGet('localStorage', 'ss-broadcast-settings') || '{}');
+    if (RESOLUTION_PRESETS[saved.resolution]) defaults.resolution = saved.resolution;
+    if ([15, 30, 60].includes(saved.fps)) defaults.fps = saved.fps;
+    if (QUALITY_PRESETS[saved.bitrate]) defaults.bitrate = saved.bitrate;
+    if (CONTENT_PRESETS[saved.content]) defaults.content = saved.content;
+  } catch (e) {
+    // ignore corrupted settings
+  }
+  return defaults;
 }
+
+function updateQualityBadge() {
+  qualityBadge.textContent = formatSettings(currentSettings);
+}
+
+function updateToggle(groupId, activeValue) {
+  const group = document.getElementById(groupId);
+  group.querySelectorAll('.toggle-option').forEach(btn => {
+    const isActive = btn.dataset.value === String(activeValue);
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-pressed', String(isActive));
+  });
+}
+
+function renderSettings() {
+  updateToggle('resolution-toggle', currentSettings.resolution);
+  updateToggle('fps-toggle', currentSettings.fps);
+  updateToggle('bitrate-toggle', currentSettings.bitrate);
+  updateToggle('content-toggle', currentSettings.content);
+  updateQualityBadge();
+}
+
+function setSetting(key, rawValue) {
+  const value = key === 'fps' ? parseInt(rawValue, 10) : rawValue;
+  if (currentSettings[key] === value) return;
+  currentSettings[key] = value;
+
+  renderSettings();
+  storageSet('localStorage', 'ss-broadcast-settings', JSON.stringify(currentSettings));
+  socket.emit('quality-changed', { settings: currentSettings });
+
+  if (key === 'resolution' || key === 'fps') applyConstraints();
+  if (key === 'content') applyContentHint();
+  peers.forEach(peer => peer.pc && applyEncodingParams(peer.pc));
+}
+
+document.querySelectorAll('.toggle-group[data-setting]').forEach(group => {
+  group.addEventListener('click', (e) => {
+    const btn = e.target.closest('.toggle-option');
+    if (btn) setSetting(group.dataset.setting, btn.dataset.value);
+  });
+});
+
+renderSettings();
 
 // ===== CAPTURE SCREEN =====
 async function startBroadcast() {
+  if (stream || isFatal) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    showToast('Seu navegador não suporta compartilhamento de tela', '❌');
+    return;
+  }
+
+  btnStart.disabled = true;
   try {
     const res = RESOLUTION_PRESETS[currentSettings.resolution];
 
     // Step 1: Capture screen with audio
-    stream = await navigator.mediaDevices.getDisplayMedia({
+    const captured = await navigator.mediaDevices.getDisplayMedia({
       video: {
-        width: { ideal: res.width },
-        height: { ideal: res.height },
-        frameRate: { ideal: currentSettings.fps }
+        width: { ideal: res.width, max: res.width },
+        height: { ideal: res.height, max: res.height },
+        frameRate: { ideal: currentSettings.fps, max: currentSettings.fps }
       },
       audio: {
         echoCancellation: false,
@@ -59,259 +135,79 @@ async function startBroadcast() {
         sampleRate: 48000,
         channelCount: 2 // Request stereo audio
       },
-      // Prefer sharing a tab to get audio by default
       preferCurrentTab: false,
-      selfBrowserSurface: 'include',
+      // Evita o efeito "espelho infinito" ao compartilhar a própria aba
+      selfBrowserSurface: 'exclude',
       systemAudio: 'include',
       surfaceSwitching: 'include'
     });
 
-    // Check if audio was captured from screen share
-    const hasDisplayAudio = stream.getAudioTracks().length > 0;
+    if (isFatal) {
+      captured.getTracks().forEach(track => track.stop());
+      return;
+    }
+    stream = captured;
+    applyContentHint();
 
-    if (hasDisplayAudio) {
-      showToast('Tela + áudio capturados em alta qualidade!', '🔊');
+    // Check if audio was captured from screen share
+    if (stream.getAudioTracks().length > 0) {
+      showToast('Tela + áudio capturados!', '🔊');
     } else {
-      // No audio from display — try to capture system audio separately
-      showToast('Áudio do sistema não disponível. Compartilhe uma aba do Chrome para incluir áudio.', '⚠️');
+      showToast('Transmitindo sem áudio. Compartilhe uma aba e marque "Compartilhar áudio" para incluir som.', '⚠️');
     }
 
     preview.srcObject = stream;
-    preview.style.display = 'block';
-    placeholder.style.display = 'none';
-    liveBadge.style.display = '';
-    updateQualityBadge();
-    btnStart.style.display = 'none';
-    btnStop.style.display = '';
+    preview.hidden = false;
+    placeholder.hidden = true;
+    liveBadge.hidden = false;
+    qualityBadge.hidden = false;
+    btnStart.hidden = true;
+    btnStop.hidden = false;
 
-    // Handle stream end
-    stream.getVideoTracks()[0].onended = () => {
-      stopBroadcast();
-    };
+    // Handle stream end (usuário clicou em "Parar compartilhamento" do navegador)
+    stream.getVideoTracks()[0].addEventListener('ended', () => stopBroadcast());
 
-    // Send quality settings to server so new viewers get it
-    socket.emit('quality-changed', { roomId, settings: currentSettings });
-
-    // Close any existing peer connections to start fresh
-    peerConnections.forEach((pc) => pc.close());
-    peerConnections.clear();
+    socket.emit('quality-changed', { settings: currentSettings });
+    socket.emit('stream-state', { streaming: true });
 
     // Create offers for all known viewers
-    for (const viewerId of viewers) {
-      const pc = await createPeerConnection(viewerId);
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit('offer', { to: viewerId, offer });
-    }
-
+    closeAllPeers();
+    viewers.forEach(viewerId => connectToViewer(viewerId));
   } catch (err) {
     console.error('Capture error:', err);
-    if (err.name !== 'NotAllowedError') {
+    if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
       showToast('Erro ao capturar tela', '❌');
     }
+  } finally {
+    btnStart.disabled = false;
   }
 }
 
-function stopBroadcast() {
-  if (stream) {
-    stream.getTracks().forEach(track => track.stop());
-    stream = null;
-  }
-
-  preview.srcObject = null;
-  preview.style.display = 'none';
-  placeholder.style.display = '';
-  liveBadge.style.display = 'none';
-  qualityBadge.style.display = 'none';
-  btnStart.style.display = '';
-  btnStop.style.display = 'none';
-
-  peerConnections.forEach((pc) => pc.close());
-  peerConnections.clear();
-
-  showToast('Transmissão encerrada', '⏹️');
-}
-
-// ===== WEBRTC PEER CONNECTION =====
-async function createPeerConnection(viewerId) {
-  const pc = new RTCPeerConnection(ICE_SERVERS);
-  peerConnections.set(viewerId, pc);
-
-  pc.onicecandidate = (event) => {
-    if (event.candidate) {
-      socket.emit('ice-candidate', {
-        to: viewerId,
-        candidate: event.candidate
-      });
-    }
-  };
-
-  pc.oniceconnectionstatechange = () => {
-    console.log(`[Peer ${viewerId}] ICE state: ${pc.iceConnectionState}`);
-    if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
-      pc.close();
-      peerConnections.delete(viewerId);
-    }
-  };
-
-  if (stream) {
-    addStreamToPeer(pc, viewerId);
-  }
-
-  return pc;
-}
-
-function addStreamToPeer(pc, viewerId) {
+function stopBroadcast({ silent = false } = {}) {
   if (!stream) return;
 
-  // Remove existing senders
-  pc.getSenders().forEach(sender => {
-    try { pc.removeTrack(sender); } catch(e) {}
-  });
+  stream.getTracks().forEach(track => track.stop());
+  stream = null;
 
-  // Add ALL tracks (video + audio)
-  stream.getTracks().forEach(track => {
-    console.log(`[Peer] Adding track: ${track.kind} (${track.label})`);
-    pc.addTrack(track, stream);
-  });
+  preview.srcObject = null;
+  preview.hidden = true;
+  placeholder.hidden = false;
+  liveBadge.hidden = true;
+  qualityBadge.hidden = true;
+  btnStart.hidden = false;
+  btnStop.hidden = true;
 
-  applyBitrateToConnection(pc);
+  closeAllPeers();
+  socket.emit('stream-state', { streaming: false });
+
+  if (!silent) showToast('Transmissão encerrada', '⏹️');
 }
 
-async function applyBitrateToConnection(pc) {
-  const preset = QUALITY_PRESETS[currentSettings.bitrate];
-
-  pc.getSenders().forEach(async (sender) => {
-    if (sender.track && sender.track.kind === 'video') {
-      const params = sender.getParameters();
-      if (!params.encodings) params.encodings = [{}];
-      params.encodings[0].maxBitrate = preset.maxBitrate;
-      try {
-        await sender.setParameters(params);
-      } catch (e) {
-        console.warn('Could not set video bitrate:', e);
-      }
-    }
-    if (sender.track && sender.track.kind === 'audio') {
-      const params = sender.getParameters();
-      if (!params.encodings) params.encodings = [{}];
-      params.encodings[0].maxBitrate = 256000; // 256 kbps for high quality stereo audio
-      try {
-        await sender.setParameters(params);
-      } catch (e) {
-        console.warn('Could not set audio bitrate:', e);
-      }
-    }
-  });
-}
-
-// ===== SOCKET EVENTS =====
-socket.on('connect', () => {
-  socket.emit('broadcaster-join', { roomId, name: userName }, (response) => {
-    if (response.success) {
-      console.log('[Broadcaster] Joined room:', roomId);
-      // Send initial quality settings
-      socket.emit('quality-changed', { roomId, settings: currentSettings });
-    }
-  });
-});
-
-// New viewer wants to connect
-socket.on('viewer-joined', async ({ id, name }) => {
-  showToast(`${name} entrou na sala`, '👋');
-  viewers.add(id);
-
-  if (stream) {
-    const pc = await createPeerConnection(id);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    socket.emit('offer', { to: id, offer });
-  }
-});
-
-// Viewer sends answer
-socket.on('answer', async ({ from, answer }) => {
-  const pc = peerConnections.get(from);
-  if (pc) {
-    try {
-      await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    } catch (e) {
-      console.error('Error setting answer:', e);
-    }
-  }
-});
-
-// ICE candidate from viewer
-socket.on('ice-candidate', async ({ from, candidate }) => {
-  const pc = peerConnections.get(from);
-  if (pc) {
-    try {
-      await pc.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (e) {
-      console.error('Error adding ICE candidate:', e);
-    }
-  }
-});
-
-// Viewer left
-socket.on('viewer-left', ({ id, name }) => {
-  showToast(`${name} saiu da sala`, '👋');
-  viewers.delete(id);
-  const pc = peerConnections.get(id);
-  if (pc) {
-    pc.close();
-    peerConnections.delete(id);
-  }
-});
-
-// Room users update
-socket.on('room-users', async (users) => {
-  updateUserList(userList, users, viewerCountEl);
-
-  // Sync viewers set
-  users.forEach(async (user) => {
-    if (user.role === 'viewer') {
-      viewers.add(user.id);
-      // If transmitting and we don't have a PC for them, create and offer
-      if (stream && !peerConnections.has(user.id)) {
-        const pc = await createPeerConnection(user.id);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit('offer', { to: user.id, offer });
-      }
-    }
-  });
-});
-
-// ===== QUALITY CONTROLS =====
-function setResolution(res) {
-  currentSettings.resolution = res;
-  updateToggle('resolution-toggle', res);
-  updateQualityBadge();
-  applyConstraints();
-  socket.emit('quality-changed', { roomId, settings: currentSettings });
-}
-
-function setFPS(fps) {
-  currentSettings.fps = fps;
-  updateToggle('fps-toggle', String(fps));
-  updateQualityBadge();
-  applyConstraints();
-  socket.emit('quality-changed', { roomId, settings: currentSettings });
-}
-
-function setBitrate(preset) {
-  currentSettings.bitrate = preset;
-  updateToggle('bitrate-toggle', preset);
-  updateQualityBadge();
-  peerConnections.forEach(pc => applyBitrateToConnection(pc));
-  socket.emit('quality-changed', { roomId, settings: currentSettings });
-}
-
-function updateToggle(groupId, activeValue) {
-  const group = document.getElementById(groupId);
-  group.querySelectorAll('.toggle-option').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.value === activeValue);
+function applyContentHint() {
+  if (!stream) return;
+  const preset = CONTENT_PRESETS[currentSettings.content];
+  stream.getVideoTracks().forEach(track => {
+    if ('contentHint' in track) track.contentHint = preset.hint;
   });
 }
 
@@ -325,30 +221,361 @@ async function applyConstraints() {
 
   try {
     await videoTrack.applyConstraints({
-      width: { ideal: res.width },
-      height: { ideal: res.height },
-      frameRate: { ideal: currentSettings.fps }
+      width: { ideal: res.width, max: res.width },
+      height: { ideal: res.height, max: res.height },
+      frameRate: { ideal: currentSettings.fps, max: currentSettings.fps }
     });
   } catch (e) {
     console.warn('Could not apply constraints:', e);
   }
 }
 
-// ===== UTILITIES =====
-function copyRoomCode() {
-  copyToClipboard(roomId);
+// ===== WEBRTC PEER CONNECTION =====
+function closePeer(viewerId) {
+  const peer = peers.get(viewerId);
+  if (!peer) return;
+  clearTimeout(peer.disconnectTimer);
+  if (peer.pc) peer.pc.close();
+  peers.delete(viewerId);
 }
 
-function toggleFullscreen() {
-  const container = document.getElementById('video-container');
-  if (!document.fullscreenElement) {
-    container.requestFullscreen();
-  } else {
-    document.exitFullscreen();
+function closeAllPeers() {
+  Array.from(peers.keys()).forEach(closePeer);
+}
+
+// Cria (ou recria) a conexão com um espectador e envia a offer
+async function connectToViewer(viewerId) {
+  if (!stream) return;
+  closePeer(viewerId);
+
+  // Cada conexão tem um número de sessão: respostas/candidatos antigos são ignorados
+  const peer = {
+    pc: null,
+    session: ++sessionCounter,
+    pendingCandidates: [],
+    disconnectTimer: null,
+    createdAt: Date.now(),
+    lastBytes: null,
+    lastTimestamp: null,
+    statsText: ''
+  };
+  peers.set(viewerId, peer);
+
+  const config = await getIceConfig();
+  if (peers.get(viewerId) !== peer || !stream) return; // superseded while loading config
+
+  const pc = new RTCPeerConnection(config);
+  peer.pc = pc;
+
+  pc.onicecandidate = (event) => {
+    if (event.candidate) {
+      socket.emit('ice-candidate', { to: viewerId, candidate: event.candidate, session: peer.session });
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (peers.get(viewerId) !== peer) return;
+    const state = pc.connectionState;
+    console.log(`[Peer ${viewerId}] connection state: ${state}`);
+    clearTimeout(peer.disconnectTimer);
+
+    if (state === 'connected') {
+      retries.delete(viewerId);
+    } else if (state === 'disconnected') {
+      // "disconnected" costuma ser passageiro: espera antes de recriar
+      peer.disconnectTimer = setTimeout(() => {
+        if (peers.get(viewerId) === peer && pc.connectionState !== 'connected') scheduleReconnect(viewerId);
+      }, DISCONNECT_GRACE);
+    } else if (state === 'failed') {
+      scheduleReconnect(viewerId);
+    }
+  };
+
+  addTracksToPeer(pc);
+
+  try {
+    const offer = await pc.createOffer();
+    const localOffer = { type: offer.type, sdp: enableStereoOpus(offer.sdp) };
+    await pc.setLocalDescription(localOffer);
+    if (peers.get(viewerId) !== peer) return;
+    socket.emit('offer', { to: viewerId, offer: localOffer, session: peer.session });
+  } catch (e) {
+    console.error('Error creating offer:', e);
+    scheduleReconnect(viewerId);
   }
 }
 
-window.addEventListener('beforeunload', () => {
-  stopBroadcast();
+function scheduleReconnect(viewerId) {
+  if (!stream || !viewers.has(viewerId)) return;
+  const attempt = (retries.get(viewerId) || 0) + 1;
+  if (attempt > MAX_RETRIES) {
+    closePeer(viewerId);
+    setViewerStats(viewerId, 'sem conexão');
+    showToast('Não foi possível conectar a um espectador (rede bloqueada?)', '⚠️');
+    return;
+  }
+  retries.set(viewerId, attempt);
+  setTimeout(() => {
+    if (stream && viewers.has(viewerId)) connectToViewer(viewerId);
+  }, Math.min(1000 * attempt, 5000));
+}
+
+function addTracksToPeer(pc) {
+  const preset = QUALITY_PRESETS[currentSettings.bitrate];
+
+  stream.getVideoTracks().forEach(track => {
+    const transceiver = pc.addTransceiver(track, {
+      direction: 'sendonly',
+      streams: [stream],
+      sendEncodings: [{ maxBitrate: preset.maxBitrate, maxFramerate: currentSettings.fps }]
+    });
+    preferVideoCodecs(transceiver);
+  });
+
+  stream.getAudioTracks().forEach(track => {
+    pc.addTransceiver(track, {
+      direction: 'sendonly',
+      streams: [stream],
+      sendEncodings: [{ maxBitrate: AUDIO_MAX_BITRATE }]
+    });
+  });
+
+  applyEncodingParams(pc);
+}
+
+async function applyEncodingParams(pc) {
+  const preset = QUALITY_PRESETS[currentSettings.bitrate];
+  const content = CONTENT_PRESETS[currentSettings.content];
+
+  for (const sender of pc.getSenders()) {
+    if (!sender.track) continue;
+    const sendParams = sender.getParameters();
+    if (!sendParams.encodings || !sendParams.encodings.length) continue;
+
+    if (sender.track.kind === 'video') {
+      sendParams.encodings[0].maxBitrate = preset.maxBitrate;
+      sendParams.encodings[0].maxFramerate = currentSettings.fps;
+      sendParams.degradationPreference = content.degradation;
+    } else {
+      sendParams.encodings[0].maxBitrate = AUDIO_MAX_BITRATE;
+    }
+
+    try {
+      await sender.setParameters(sendParams);
+    } catch (e) {
+      console.warn(`Could not set ${sender.track.kind} parameters:`, e);
+    }
+  }
+}
+
+// ===== CONNECTION STATS =====
+function setViewerStats(viewerId, text) {
+  const peer = peers.get(viewerId);
+  if (peer) peer.statsText = text;
+  const el = userList.querySelector(`[data-user-id="${CSS.escape(viewerId)}"] .user-stats`);
+  if (el) el.textContent = text;
+}
+
+async function collectStats() {
+  for (const [viewerId, peer] of peers) {
+    if (!peer.pc || peer.pc.connectionState !== 'connected') {
+      if (peer.pc) setViewerStats(viewerId, 'conectando...');
+      continue;
+    }
+
+    let report;
+    try {
+      report = await peer.pc.getStats();
+    } catch (e) {
+      continue;
+    }
+
+    let video = null;
+    let rtt = null;
+    report.forEach(s => {
+      if (s.type === 'outbound-rtp' && s.kind === 'video') video = s;
+      if (s.type === 'candidate-pair' && s.state === 'succeeded' && s.nominated && s.currentRoundTripTime != null) {
+        rtt = s.currentRoundTripTime;
+      }
+    });
+    if (!video) continue;
+
+    const parts = [];
+    if (peer.lastBytes != null && video.timestamp > peer.lastTimestamp) {
+      const kbps = ((video.bytesSent - peer.lastBytes) * 8) / (video.timestamp - peer.lastTimestamp);
+      parts.push(kbps >= 1000 ? `${(kbps / 1000).toFixed(1)} Mbps` : `${Math.round(kbps)} kbps`);
+    }
+    peer.lastBytes = video.bytesSent;
+    peer.lastTimestamp = video.timestamp;
+
+    if (video.framesPerSecond != null) parts.push(`${Math.round(video.framesPerSecond)} fps`);
+    if (rtt != null) parts.push(`${Math.round(rtt * 1000)} ms`);
+    if (video.qualityLimitationReason === 'bandwidth') parts.push('limitado pela rede');
+    if (video.qualityLimitationReason === 'cpu') parts.push('limitado pela CPU');
+
+    if (parts.length) setViewerStats(viewerId, parts.join(' · '));
+  }
+}
+
+setInterval(collectStats, STATS_INTERVAL);
+
+// ===== FATAL ERRORS =====
+function showFatal(message) {
+  isFatal = true;
+  stopBroadcast({ silent: true });
+  document.getElementById('error-msg').textContent = message;
+  document.getElementById('error-overlay').hidden = false;
+  btnStart.disabled = true;
+}
+
+// ===== SOCKET EVENTS =====
+socket.on('connect', () => {
+  if (isFatal) return;
+  if (!roomToken) {
+    showFatal('Sessão de transmissão não encontrada. Crie uma nova sala na página inicial.');
+    socket.disconnect();
+    return;
+  }
+
+  socket.emit('broadcaster-join', { roomId, name: userName, token: roomToken }, (response) => {
+    if (!response || response.error) {
+      showFatal((response && response.error) || 'Erro ao entrar na sala');
+      socket.disconnect();
+      return;
+    }
+    console.log('[Broadcaster] Joined room:', roomId);
+    maxViewers = response.maxViewers || null;
+    socket.emit('quality-changed', { settings: currentSettings });
+    socket.emit('stream-state', { streaming: !!stream });
+  });
+});
+
+socket.on('disconnect', (reason) => {
+  if (!isFatal && reason !== 'io client disconnect') {
+    showToast('Conexão com o servidor perdida, reconectando...', '⚠️');
+  }
+});
+
+// Sala aberta em outra aba
+socket.on('session-replaced', () => {
+  showFatal('Esta sala foi aberta em outra aba ou janela.');
   socket.disconnect();
 });
+
+// New viewer wants to connect
+socket.on('viewer-joined', ({ id, name }) => {
+  showToast(`${name} entrou na sala`, '👋');
+  viewers.add(id);
+  if (stream && !peers.has(id)) connectToViewer(id);
+});
+
+// Viewer pede uma nova conexão (falha do lado dele)
+socket.on('request-offer', ({ from }) => {
+  if (!stream || !viewers.has(from)) return;
+  const peer = peers.get(from);
+  // Já há uma conexão recente sendo estabelecida: não recria
+  if (peer && Date.now() - peer.createdAt < DISCONNECT_GRACE &&
+      (!peer.pc || ['new', 'connecting'].includes(peer.pc.connectionState))) {
+    return;
+  }
+  connectToViewer(from);
+});
+
+// Viewer sends answer
+socket.on('answer', async ({ from, answer, session }) => {
+  const peer = peers.get(from);
+  if (!peer || !peer.pc || peer.session !== session) return;
+  if (peer.pc.signalingState !== 'have-local-offer') return;
+
+  try {
+    await peer.pc.setRemoteDescription(answer);
+    const pending = peer.pendingCandidates;
+    peer.pendingCandidates = [];
+    for (const candidate of pending) {
+      await peer.pc.addIceCandidate(candidate).catch(e => console.warn('Error adding ICE candidate:', e));
+    }
+  } catch (e) {
+    console.error('Error setting answer:', e);
+  }
+});
+
+// ICE candidate from viewer
+socket.on('ice-candidate', async ({ from, candidate, session }) => {
+  const peer = peers.get(from);
+  if (!peer || !peer.pc || peer.session !== session || !candidate) return;
+
+  if (!peer.pc.remoteDescription) {
+    peer.pendingCandidates.push(candidate);
+    return;
+  }
+  try {
+    await peer.pc.addIceCandidate(candidate);
+  } catch (e) {
+    console.warn('Error adding ICE candidate:', e);
+  }
+});
+
+// Viewer left
+socket.on('viewer-left', ({ id, name }) => {
+  showToast(`${name} saiu da sala`, '👋');
+  viewers.delete(id);
+  retries.delete(id);
+  closePeer(id);
+});
+
+// Room users update
+socket.on('room-users', (users) => {
+  updateUserList(userList, users, viewerCountEl, maxViewers);
+
+  // Sync viewers set
+  const currentIds = new Set(users.filter(u => u.role === 'viewer').map(u => u.id));
+  Array.from(viewers).forEach(id => {
+    if (!currentIds.has(id)) {
+      viewers.delete(id);
+      closePeer(id);
+    }
+  });
+
+  currentIds.forEach(id => {
+    viewers.add(id);
+    const peer = peers.get(id);
+    if (peer && peer.statsText) setViewerStats(id, peer.statsText);
+    // If transmitting and we don't have a PC for them, create and offer
+    if (stream && !peer) connectToViewer(id);
+  });
+});
+
+// ===== UI EVENTS =====
+btnStart.addEventListener('click', startBroadcast);
+btnStop.addEventListener('click', () => stopBroadcast());
+
+document.getElementById('btn-copy-code').addEventListener('click', () => {
+  copyToClipboard(roomId, 'Código copiado!');
+});
+
+document.getElementById('btn-copy-link').addEventListener('click', () => {
+  copyToClipboard(getInviteLink(roomId), 'Link de convite copiado!');
+});
+
+document.getElementById('btn-fullscreen').addEventListener('click', () => {
+  const container = document.getElementById('video-container');
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else if (container.requestFullscreen) {
+    container.requestFullscreen().catch(() => showToast('Tela cheia não disponível', '❌'));
+  }
+});
+
+window.addEventListener('beforeunload', (e) => {
+  if (stream) {
+    // Pede confirmação antes de sair no meio da transmissão
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+window.addEventListener('pagehide', () => {
+  if (stream) stream.getTracks().forEach(track => track.stop());
+});
+
+if (isValidRoom) socket.connect();

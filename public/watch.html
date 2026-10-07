@@ -4,67 +4,72 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ScreenShare — Assistindo</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%96%A5%EF%B8%8F%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="/css/style.css">
 </head>
-<body style="overflow: hidden;">
-  <div class="watch-layout" id="watch-layout">
+<body class="watch-body">
+  <main class="watch-layout" id="watch-layout">
     <!-- Waiting screen -->
-    <div class="waiting-screen" id="waiting-screen">
-      <div class="spinner"></div>
-      <p>Conectando à transmissão...</p>
-      <p style="font-size: 13px; color: var(--text-muted);" id="waiting-msg">Aguardando o broadcaster</p>
+    <div class="waiting-screen" id="waiting-screen" role="status" aria-live="polite">
+      <div class="spinner" id="waiting-spinner"></div>
+      <p id="waiting-title">Conectando à transmissão...</p>
+      <p class="waiting-msg" id="waiting-msg">Entrando na sala...</p>
+      <a href="/" class="btn btn-secondary btn-sm" id="waiting-back" hidden>← Voltar ao início</a>
     </div>
 
     <!-- Video -->
-    <div class="watch-video-container" id="video-wrapper" style="display: none;">
+    <div class="watch-video-container" id="video-wrapper" hidden>
       <video id="remote-video" autoplay playsinline></video>
     </div>
 
+    <!-- Autoplay bloqueado: o vídeo roda mudo até o usuário clicar -->
+    <button class="unmute-banner" id="unmute-banner" type="button" hidden>
+      🔇 Clique para ativar o som
+    </button>
+
     <!-- Top info -->
     <div class="watch-info" id="watch-info">
-      <span class="badge badge-live">
+      <span class="badge badge-live" id="live-badge" hidden>
         <span class="dot"></span> AO VIVO
       </span>
       <span class="broadcaster-name" id="broadcaster-label"></span>
-      <span class="badge badge-quality" id="quality-info"></span>
+      <span class="badge badge-quality" id="quality-info" hidden></span>
     </div>
 
     <!-- Bottom controls -->
     <div class="watch-controls" id="watch-controls">
       <div class="watch-controls-left">
-        <button class="btn-icon" id="btn-mute" onclick="toggleMute()" title="Mudo">🔊</button>
+        <button class="btn-icon" id="btn-mute" type="button" title="Mudo (M)" aria-label="Silenciar">🔊</button>
         <div class="volume-control">
-          <input type="range" class="volume-slider" id="volume-slider" min="0" max="100" value="100" oninput="setVolume(this.value)">
+          <input type="range" class="volume-slider" id="volume-slider" min="0" max="100" value="100" aria-label="Volume">
           <span class="volume-value" id="volume-value">100%</span>
         </div>
       </div>
       <div class="watch-controls-right">
-        <button class="btn-icon" id="btn-pip" onclick="togglePiP()" title="Picture-in-Picture">🖼️</button>
-        <button class="btn-icon" id="btn-fullscreen" onclick="toggleFullscreen()" title="Tela cheia">⛶</button>
-        <button class="btn-icon" id="btn-users" onclick="toggleSidebar()" title="Espectadores">👥</button>
+        <button class="btn-icon" id="btn-pip" type="button" title="Picture-in-Picture (P)" aria-label="Picture-in-Picture">🖼️</button>
+        <button class="btn-icon" id="btn-fullscreen" type="button" title="Tela cheia (F)" aria-label="Tela cheia">⛶</button>
+        <button class="btn-icon" id="btn-users" type="button" title="Espectadores" aria-label="Mostrar espectadores" aria-expanded="false" aria-controls="watch-sidebar">👥</button>
       </div>
     </div>
-  </div>
+  </main>
 
   <!-- Sidebar -->
-  <div class="watch-sidebar" id="watch-sidebar">
+  <aside class="watch-sidebar" id="watch-sidebar" aria-label="Pessoas na sala">
     <div class="sidebar-header">
       <h2>Na sala</h2>
-      <button class="sidebar-close" onclick="toggleSidebar()">✕</button>
+      <button class="sidebar-close" id="btn-close-sidebar" type="button" aria-label="Fechar">✕</button>
     </div>
     <div class="viewer-count" id="viewer-count">0 espectadores</div>
     <ul class="user-list" id="user-list"></ul>
-  </div>
+  </aside>
 
   <!-- Broadcaster ended overlay -->
-  <div id="ended-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:50; display:none;">
-    <div class="page-center">
-      <div class="glass-card" style="text-align:center; max-width:400px;">
-        <div style="font-size:48px; margin-bottom:16px;">📡</div>
-        <h2 style="margin-bottom:8px;">Transmissão encerrada</h2>
-        <p style="color:var(--text-secondary); margin-bottom:24px;">O broadcaster encerrou a transmissão.</p>
-        <a href="/" class="btn btn-primary">← Voltar ao início</a>
-      </div>
+  <div class="fullscreen-overlay" id="ended-overlay" hidden>
+    <div class="glass-card overlay-card" role="alertdialog" aria-labelledby="ended-title">
+      <div class="overlay-icon" aria-hidden="true">📡</div>
+      <h2 id="ended-title">Transmissão encerrada</h2>
+      <p class="overlay-text">O broadcaster encerrou a transmissão.</p>
+      <a href="/" class="btn btn-primary">← Voltar ao início</a>
     </div>
   </div>
 
