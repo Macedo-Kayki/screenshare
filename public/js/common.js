@@ -46,7 +46,97 @@ function getIceConfig() {
   return iceConfigPromise;
 }
 
-function showToast(message, icon = 'ℹ️') {
+// ===== ICONS (traços no estilo Lucide, 24x24) =====
+const ICONS = {
+  monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
+  cast: '<path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><path d="M2 12a9 9 0 0 1 8 8"/><path d="M2 16a5 5 0 0 1 4 4"/><path d="M2 20h.01"/>',
+  eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  maximize: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
+  volume: '<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>',
+  'volume-x': '<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>',
+  pip: '<path d="M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4"/><rect width="10" height="7" x="12" y="13" rx="2"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  'user-plus': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>',
+  'user-minus': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11h-6"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  stop: '<rect width="14" height="14" x="5" y="5" rx="2"/>',
+  'arrow-left': '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  check: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  'x-circle': '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+  radio: '<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>',
+  'wifi-off': '<path d="M12 20h.01"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 4.18-2.64"/><path d="M22 8.82a15 15 0 0 0-11.29-3.76"/><path d="M5 12.86a10 10 0 0 1 5.17-2.69"/><path d="M19 12.86a10 10 0 0 0-2-1.52"/><path d="m2 2 20 20"/>'
+};
+
+function createIcon(name) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  svg.innerHTML = ICONS[name] || ICONS.info;
+  return svg;
+}
+
+function setIcon(el, name) {
+  if (!el) return;
+  el.dataset.icon = name;
+  el.replaceChildren(createIcon(name));
+}
+
+// Preenche todo <span class="icon" data-icon="..."> da página
+function hydrateIcons(root = document) {
+  root.querySelectorAll('[data-icon]').forEach(el => {
+    if (!el.firstElementChild) setIcon(el, el.dataset.icon);
+  });
+}
+
+// ===== THEME =====
+function getTheme() {
+  const forced = document.documentElement.getAttribute('data-theme');
+  if (forced) return forced;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function initThemeToggles() {
+  document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
+    const render = () => {
+      const isDark = getTheme() === 'dark';
+      const label = isDark ? 'Usar tema claro' : 'Usar tema escuro';
+      setIcon(btn.querySelector('.icon'), isDark ? 'sun' : 'moon');
+      btn.setAttribute('aria-label', label);
+      btn.title = label;
+    };
+    render();
+    btn.addEventListener('click', () => {
+      const next = getTheme() === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      storageSet('localStorage', 'ss-theme', next);
+      render();
+    });
+  });
+}
+
+// ===== TOASTS =====
+const TOAST_ICONS = {
+  info: 'info',
+  success: 'check',
+  warning: 'alert',
+  error: 'x-circle',
+  join: 'user-plus',
+  leave: 'user-minus'
+};
+
+function showToast(message, type = 'info') {
   let container = document.querySelector('.toast-container');
   if (!container) {
     container = document.createElement('div');
@@ -57,18 +147,21 @@ function showToast(message, icon = 'ℹ️') {
   }
 
   const toast = document.createElement('div');
-  toast.className = 'toast';
+  toast.className = `toast toast-${TOAST_ICONS[type] ? type : 'info'}`;
   const iconEl = document.createElement('span');
-  iconEl.setAttribute('aria-hidden', 'true');
-  iconEl.textContent = icon;
+  iconEl.className = 'toast-icon';
+  iconEl.appendChild(createIcon(TOAST_ICONS[type] || 'info'));
   const textEl = document.createElement('span');
   textEl.textContent = message;
   toast.append(iconEl, textEl);
   container.appendChild(toast);
 
+  // Avisos e erros ficam mais tempo na tela
+  const duration = type === 'warning' || type === 'error' ? 5000 : 3000;
   setTimeout(() => {
-    toast.remove();
-  }, 3000);
+    toast.classList.add('toast-leaving');
+    setTimeout(() => toast.remove(), 200);
+  }, duration);
 }
 
 function getInitials(name) {
@@ -83,14 +176,23 @@ function getInitials(name) {
   return initials || '?';
 }
 
+// Cor estável do avatar a partir do nome
+function nameHue(name) {
+  let hash = 0;
+  for (const ch of String(name || '')) hash = (hash * 31 + ch.codePointAt(0)) >>> 0;
+  return hash % 360;
+}
+
 function createUserElement(user) {
+  const isHost = user.role === 'broadcaster';
   const li = document.createElement('li');
-  li.className = 'user-item';
+  li.className = isHost ? 'user-item is-host' : 'user-item';
   li.dataset.userId = user.id;
 
   const avatar = document.createElement('div');
   avatar.className = 'user-avatar';
   avatar.setAttribute('aria-hidden', 'true');
+  avatar.style.setProperty('--hue', nameHue(user.name));
   avatar.textContent = getInitials(user.name);
 
   const info = document.createElement('div');
@@ -102,7 +204,7 @@ function createUserElement(user) {
 
   const role = document.createElement('div');
   role.className = 'user-role';
-  role.textContent = user.role === 'broadcaster' ? '📡 Transmitindo' : '👁️ Assistindo';
+  role.textContent = isHost ? 'Transmitindo' : 'Assistindo';
 
   const stats = document.createElement('div');
   stats.className = 'user-stats';
@@ -123,7 +225,7 @@ function updateUserList(listElement, users, countElement, maxViewers) {
 }
 
 function copyToClipboard(text, message = 'Copiado!') {
-  const done = () => showToast(message, '📋');
+  const done = () => showToast(message, 'success');
   if (navigator.clipboard && window.isSecureContext) {
     navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
   } else {
@@ -140,7 +242,7 @@ function fallbackCopy(text, done) {
     document.execCommand('copy');
     done();
   } catch (e) {
-    showToast('Não foi possível copiar', '❌');
+    showToast('Não foi possível copiar', 'error');
   }
   document.body.removeChild(input);
 }
@@ -217,3 +319,7 @@ function enableStereoOpus(sdp) {
   const params = Object.entries(extra).map(([k, v]) => `${k}=${v}`).join(';');
   return sdp.replace(rtpmapLine, `${rtpmapLine}\r\na=fmtp:${pt} ${params}`);
 }
+
+// common.js é carregado no fim do <body>: o DOM já está pronto
+hydrateIcons();
+initThemeToggles();

@@ -3,47 +3,83 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Compartilhe sua tela em tempo real com qualidade e sem lag.">
+  <meta name="description" content="Compartilhe sua tela em tempo real, com áudio, direto do navegador.">
+  <meta name="theme-color" content="#0b0b0c" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f5f5f2" media="(prefers-color-scheme: light)">
   <title>ScreenShare — Transmissão de Tela em Tempo Real</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%96%A5%EF%B8%8F%3C/text%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%2317171a%27/%3E%3Crect x=%277%27 y=%279%27 width=%2718%27 height=%2712%27 rx=%272%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%272.2%27/%3E%3Ccircle cx=%2725%27 cy=%277%27 r=%274%27 fill=%27%23ff5a1f%27/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/theme.js"></script>
 </head>
-<body>
-  <div class="bg-animated"></div>
+<body class="page-home">
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark"><span class="icon" data-icon="monitor"></span></span>
+      <span class="brand-name">ScreenShare</span>
+    </a>
+    <div class="topbar-spacer"></div>
+    <button class="icon-btn" type="button" data-theme-toggle><span class="icon"></span></button>
+  </header>
 
-  <main class="page-center">
-    <div class="glass-card index-card fade-in">
-      <div class="logo">
-        <div class="logo-icon" aria-hidden="true">🖥️</div>
-        <h1 class="logo-text">ScreenShare</h1>
-      </div>
-      <p class="subtitle">Transmita sua tela em tempo real, com áudio e sem lag.</p>
-
-      <p class="invite-banner" id="invite-banner" hidden>
-        Você foi convidado para a sala <strong id="invite-code"></strong>. Digite seu nome para entrar.
+  <main class="home">
+    <section class="home-hero" aria-labelledby="home-title">
+      <p class="eyebrow"><span class="tally"></span> WebRTC · ponto a ponto · sem instalar nada</p>
+      <h1 class="home-title" id="home-title">Sua tela, <em>ao vivo</em>, em segundos.</h1>
+      <p class="home-lead">
+        Transmita com áudio em até 1080p a 60 fps direto do navegador.
+        Quem assiste só precisa do link — sem conta, sem download.
       </p>
 
-      <div class="input-group">
-        <label for="username">Seu nome</label>
-        <input type="text" id="username" class="input" placeholder="Digite seu nome..." maxlength="30" autocomplete="nickname">
+      <ol class="steps">
+        <li class="step"><strong>Crie a sala</strong><span>Digite seu nome e comece.</span></li>
+        <li class="step"><strong>Envie o link</strong><span>Ou o código de 6 letras.</span></li>
+        <li class="step"><strong>Compartilhe</strong><span>Tela, janela ou aba.</span></li>
+      </ol>
+    </section>
+
+    <section class="panel home-card" aria-labelledby="card-title">
+      <div class="toggle-group toggle-group-lg" id="mode-toggle" role="group" aria-label="O que você quer fazer?">
+        <button class="toggle-option active" type="button" data-value="broadcast" aria-pressed="true">
+          <span class="icon icon-sm" data-icon="cast"></span> Transmitir
+        </button>
+        <button class="toggle-option" type="button" data-value="watch" aria-pressed="false">
+          <span class="icon icon-sm" data-icon="eye"></span> Assistir
+        </button>
       </div>
 
-      <button id="btn-create" class="btn btn-primary btn-block" type="button">
-        📡 Iniciar Transmissão
-      </button>
+      <p class="invite-banner" id="invite-banner" hidden>
+        <span class="icon" data-icon="link"></span>
+        <span>Você foi convidado para a sala <strong id="invite-code"></strong>. Digite seu nome para entrar.</span>
+      </p>
 
-      <div class="divider">ou</div>
+      <h2 class="home-card-title" id="card-title">Criar uma sala</h2>
+      <p class="home-card-desc" id="card-desc">Você recebe um link para enviar a quem vai assistir.</p>
 
-      <div class="input-group">
-        <label for="room-code">Código da sala</label>
-        <input type="text" id="room-code" class="input input-code" placeholder="Ex: ABC123" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <div class="field">
+        <label class="field-label" for="username">Seu nome</label>
+        <input type="text" id="username" class="input" placeholder="Como os outros vão te ver" maxlength="30" autocomplete="nickname">
       </div>
 
-      <button id="btn-join" class="btn btn-secondary btn-block" type="button">
-        👁️ Entrar na Sala
+      <div class="field" id="code-field" hidden>
+        <label class="field-label" for="room-code">Código da sala</label>
+        <input type="text" id="room-code" class="input input-code" placeholder="ABC123" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      </div>
+
+      <button id="btn-create" class="btn btn-primary btn-lg btn-block" type="button">
+        <span class="icon" data-icon="cast"></span> Criar sala e transmitir
       </button>
-    </div>
+      <button id="btn-join" class="btn btn-primary btn-lg btn-block" type="button" hidden>
+        <span class="icon" data-icon="eye"></span> Entrar na sala
+      </button>
+
+      <p class="home-footnote">
+        <span class="icon icon-sm" data-icon="info"></span>
+        <span>Para transmitir com som, compartilhe uma aba do navegador e marque “Compartilhar áudio”.</span>
+      </p>
+    </section>
   </main>
+
+  <footer class="site-footer">A transmissão vai direto do seu navegador para quem assiste.</footer>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/common.js"></script>

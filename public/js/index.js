@@ -4,10 +4,48 @@ const socket = io();
 
 const usernameInput = document.getElementById('username');
 const roomCodeInput = document.getElementById('room-code');
+const codeField = document.getElementById('code-field');
 const btnCreate = document.getElementById('btn-create');
 const btnJoin = document.getElementById('btn-join');
+const modeToggle = document.getElementById('mode-toggle');
+const cardTitle = document.getElementById('card-title');
+const cardDesc = document.getElementById('card-desc');
 
 const ROOM_CODE_REGEX = /^[A-Z0-9]{6}$/;
+
+const MODES = {
+  broadcast: {
+    title: 'Criar uma sala',
+    desc: 'Você recebe um link para enviar a quem vai assistir.'
+  },
+  watch: {
+    title: 'Entrar numa sala',
+    desc: 'Use o código ou o link que você recebeu.'
+  }
+};
+
+let mode = 'broadcast';
+
+function setMode(next) {
+  mode = next;
+  modeToggle.querySelectorAll('.toggle-option').forEach(btn => {
+    const isActive = btn.dataset.value === mode;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-pressed', String(isActive));
+  });
+  cardTitle.textContent = MODES[mode].title;
+  cardDesc.textContent = MODES[mode].desc;
+  codeField.hidden = mode !== 'watch';
+  btnCreate.hidden = mode !== 'broadcast';
+  btnJoin.hidden = mode !== 'watch';
+}
+
+modeToggle.addEventListener('click', (e) => {
+  const btn = e.target.closest('.toggle-option');
+  if (!btn || btn.dataset.value === mode) return;
+  setMode(btn.dataset.value);
+  (mode === 'watch' && usernameInput.value.trim() ? roomCodeInput : usernameInput).focus();
+});
 
 // Nome lembrado da última visita
 usernameInput.value = storageGet('localStorage', 'ss-name') || '';
@@ -18,8 +56,7 @@ if (ROOM_CODE_REGEX.test(invitedRoom)) {
   roomCodeInput.value = invitedRoom;
   document.getElementById('invite-code').textContent = invitedRoom;
   document.getElementById('invite-banner').hidden = false;
-  btnJoin.classList.replace('btn-secondary', 'btn-primary');
-  btnCreate.classList.replace('btn-primary', 'btn-secondary');
+  setMode('watch');
 }
 
 usernameInput.focus();
@@ -27,7 +64,8 @@ usernameInput.focus();
 // Enter key behavior
 usernameInput.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
-  if (ROOM_CODE_REGEX.test(roomCodeInput.value)) joinRoom();
+  if (mode === 'broadcast') createRoom();
+  else if (ROOM_CODE_REGEX.test(roomCodeInput.value)) joinRoom();
   else roomCodeInput.focus();
 });
 
@@ -49,7 +87,7 @@ btnJoin.addEventListener('click', joinRoom);
 function markInvalid(input, message) {
   input.setAttribute('aria-invalid', 'true');
   input.focus();
-  showToast(message, '⚠️');
+  showToast(message, 'warning');
 }
 
 function getName() {
@@ -64,17 +102,12 @@ function getName() {
 
 function setCreating(isCreating) {
   btnCreate.disabled = isCreating;
-  if (isCreating) {
-    btnCreate.replaceChildren();
-    const spinner = document.createElement('div');
-    spinner.className = 'spinner spinner-sm';
-    btnCreate.append(spinner, ' Criando...');
-  } else {
-    btnCreate.textContent = '📡 Iniciar Transmissão';
-  }
+  btnCreate.toggleAttribute('data-loading', isCreating);
+  btnCreate.setAttribute('aria-busy', String(isCreating));
 }
 
 function createRoom() {
+  if (btnCreate.disabled) return;
   const name = getName();
   if (!name) return;
 
@@ -83,7 +116,7 @@ function createRoom() {
   socket.timeout(8000).emit('create-room', { name }, (err, response) => {
     if (err || !response || response.error || !response.roomId) {
       setCreating(false);
-      showToast((response && response.error) || 'Não foi possível criar a sala. Tente novamente.', '❌');
+      showToast((response && response.error) || 'Não foi possível criar a sala. Tente novamente.', 'error');
       return;
     }
 
@@ -111,3 +144,8 @@ function joinRoom() {
 
   window.location.href = `/watch.html?room=${code}&name=${encodeURIComponent(name)}`;
 }
+
+// Volta pelo histórico (bfcache) com o botão ainda em "carregando"
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) setCreating(false);
+});

@@ -1,75 +1,96 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
   <title>ScreenShare — Assistindo</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%96%A5%EF%B8%8F%3C/text%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%2317171a%27/%3E%3Crect x=%277%27 y=%279%27 width=%2718%27 height=%2712%27 rx=%272%27 fill=%27none%27 stroke=%27%23fff%27 stroke-width=%272.2%27/%3E%3Ccircle cx=%2725%27 cy=%277%27 r=%274%27 fill=%27%23ff5a1f%27/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/css/style.css">
 </head>
-<body class="watch-body">
-  <main class="watch-layout" id="watch-layout">
+<body class="page-watch">
+  <main class="theater" id="watch-layout">
     <!-- Waiting screen -->
     <div class="waiting-screen" id="waiting-screen" role="status" aria-live="polite">
       <div class="spinner" id="waiting-spinner"></div>
-      <p id="waiting-title">Conectando à transmissão...</p>
+      <p class="waiting-title" id="waiting-title">Conectando à transmissão...</p>
       <p class="waiting-msg" id="waiting-msg">Entrando na sala...</p>
-      <a href="/" class="btn btn-secondary btn-sm" id="waiting-back" hidden>← Voltar ao início</a>
+      <a href="/" class="btn btn-secondary" id="waiting-back" hidden>
+        <span class="icon icon-sm" data-icon="arrow-left"></span> Voltar ao início
+      </a>
     </div>
 
     <!-- Video -->
-    <div class="watch-video-container" id="video-wrapper" hidden>
+    <div class="theater-video" id="video-wrapper" hidden>
       <video id="remote-video" autoplay playsinline></video>
     </div>
 
     <!-- Autoplay bloqueado: o vídeo roda mudo até o usuário clicar -->
     <button class="unmute-banner" id="unmute-banner" type="button" hidden>
-      🔇 Clique para ativar o som
+      <span class="icon" data-icon="volume-x"></span> Clique para ativar o som
     </button>
 
     <!-- Top info -->
-    <div class="watch-info" id="watch-info">
+    <header class="theater-top" id="watch-info">
+      <a class="brand" href="/" title="ScreenShare" aria-label="Sair para o início">
+        <span class="brand-mark"><span class="icon" data-icon="monitor"></span></span>
+      </a>
       <span class="badge badge-live" id="live-badge" hidden>
         <span class="dot"></span> AO VIVO
       </span>
       <span class="broadcaster-name" id="broadcaster-label"></span>
       <span class="badge badge-quality" id="quality-info" hidden></span>
-    </div>
+    </header>
 
     <!-- Bottom controls -->
-    <div class="watch-controls" id="watch-controls">
-      <div class="watch-controls-left">
-        <button class="btn-icon" id="btn-mute" type="button" title="Mudo (M)" aria-label="Silenciar">🔊</button>
+    <div class="theater-bottom" id="watch-controls">
+      <div class="control-bar control-bar-volume">
+        <button class="icon-btn" id="btn-mute" type="button" title="Som (M)" aria-label="Silenciar">
+          <span class="icon" data-icon="volume"></span>
+        </button>
         <div class="volume-control">
           <input type="range" class="volume-slider" id="volume-slider" min="0" max="100" value="100" aria-label="Volume">
           <span class="volume-value" id="volume-value">100%</span>
         </div>
       </div>
-      <div class="watch-controls-right">
-        <button class="btn-icon" id="btn-pip" type="button" title="Picture-in-Picture (P)" aria-label="Picture-in-Picture">🖼️</button>
-        <button class="btn-icon" id="btn-fullscreen" type="button" title="Tela cheia (F)" aria-label="Tela cheia">⛶</button>
-        <button class="btn-icon" id="btn-users" type="button" title="Espectadores" aria-label="Mostrar espectadores" aria-expanded="false" aria-controls="watch-sidebar">👥</button>
+      <div class="control-bar">
+        <button class="icon-btn" id="btn-pip" type="button" title="Picture-in-Picture (P)" aria-label="Picture-in-Picture">
+          <span class="icon" data-icon="pip"></span>
+        </button>
+        <button class="icon-btn" id="btn-fullscreen" type="button" title="Tela cheia (F)" aria-label="Tela cheia">
+          <span class="icon" data-icon="maximize"></span>
+        </button>
+        <button class="icon-btn" id="btn-users" type="button" title="Quem está na sala" aria-label="Mostrar quem está na sala" aria-expanded="false" aria-controls="watch-sidebar">
+          <span class="icon" data-icon="users"></span>
+        </button>
       </div>
     </div>
   </main>
 
   <!-- Sidebar -->
-  <aside class="watch-sidebar" id="watch-sidebar" aria-label="Pessoas na sala">
-    <div class="sidebar-header">
-      <h2>Na sala</h2>
-      <button class="sidebar-close" id="btn-close-sidebar" type="button" aria-label="Fechar">✕</button>
+  <aside class="drawer" id="watch-sidebar" aria-label="Pessoas na sala">
+    <div class="drawer-header">
+      <h2 class="drawer-title">Na sala</h2>
+      <button class="icon-btn" id="btn-close-sidebar" type="button" aria-label="Fechar">
+        <span class="icon" data-icon="x"></span>
+      </button>
     </div>
     <div class="viewer-count" id="viewer-count">0 espectadores</div>
     <ul class="user-list" id="user-list"></ul>
+    <div class="shortcuts" aria-label="Atalhos de teclado">
+      <span><kbd>M</kbd>som</span>
+      <span><kbd>F</kbd>tela cheia</span>
+      <span><kbd>P</kbd>janela flutuante</span>
+    </div>
   </aside>
 
   <!-- Broadcaster ended overlay -->
   <div class="fullscreen-overlay" id="ended-overlay" hidden>
-    <div class="glass-card overlay-card" role="alertdialog" aria-labelledby="ended-title">
-      <div class="overlay-icon" aria-hidden="true">📡</div>
+    <div class="overlay-card" role="alertdialog" aria-labelledby="ended-title">
+      <div class="overlay-icon"><span class="icon icon-lg" data-icon="radio"></span></div>
       <h2 id="ended-title">Transmissão encerrada</h2>
-      <p class="overlay-text">O broadcaster encerrou a transmissão.</p>
-      <a href="/" class="btn btn-primary">← Voltar ao início</a>
+      <p class="overlay-text">Quem estava transmitindo encerrou a sala.</p>
+      <a href="/" class="btn btn-primary"><span class="icon icon-sm" data-icon="arrow-left"></span> Voltar ao início</a>
     </div>
   </div>
 

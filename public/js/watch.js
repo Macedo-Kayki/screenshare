@@ -110,9 +110,9 @@ function renderVolume() {
   const shown = remoteVideo.muted ? 0 : Math.round(remoteVideo.volume * 100);
   volumeSlider.value = shown;
   volumeValue.textContent = shown + '%';
-  btnMute.textContent = shown === 0 ? '🔇' : '🔊';
+  setIcon(btnMute.querySelector('.icon'), shown === 0 ? 'volume-x' : 'volume');
   btnMute.setAttribute('aria-label', shown === 0 ? 'Ativar som' : 'Silenciar');
-  volumeSlider.style.background = `linear-gradient(to right, var(--accent-primary) ${shown}%, var(--bg-tertiary) ${shown}%)`;
+  volumeSlider.style.background = `linear-gradient(to right, #fff ${shown}%, rgba(255, 255, 255, 0.2) ${shown}%)`;
 }
 
 function setVolume(value) {
@@ -178,11 +178,11 @@ async function togglePiP() {
     } else if (remoteVideo.readyState >= 2) {
       await remoteVideo.requestPictureInPicture();
     } else {
-      showToast('Aguarde o vídeo carregar', '⏳');
+      showToast('Aguarde o vídeo carregar', 'info');
     }
   } catch (e) {
     console.error('PiP error:', e);
-    showToast('PiP não disponível', '❌');
+    showToast('PiP não disponível', 'error');
   }
 }
 
@@ -193,7 +193,7 @@ function toggleFullscreen() {
   if (document.fullscreenElement) {
     document.exitFullscreen();
   } else if (watchLayout.requestFullscreen) {
-    watchLayout.requestFullscreen().catch(() => showToast('Tela cheia não disponível', '❌'));
+    watchLayout.requestFullscreen().catch(() => showToast('Tela cheia não disponível', 'error'));
   } else if (remoteVideo.webkitEnterFullscreen) {
     // iOS Safari
     remoteVideo.webkitEnterFullscreen();
@@ -299,10 +299,10 @@ function createPeerConnection(config, session) {
       stopRecovery();
       recoveryAttempts = 0;
       showVideo();
-      if (!wasConnected) showToast('Conectado à transmissão!', '📡');
+      if (!wasConnected) showToast('Conectado à transmissão!', 'success');
       wasConnected = true;
     } else if (state === 'disconnected') {
-      showToast('Conexão instável...', '⚠️');
+      showToast('Conexão instável...', 'warning');
       disconnectTimer = setTimeout(() => {
         if (pc === peerConnection && pc.connectionState !== 'connected') requestRecovery();
       }, DISCONNECT_GRACE);
@@ -403,11 +403,11 @@ socket.on('connect', () => {
     displayQualitySettings(response.qualitySettings);
 
     if (!broadcasterOnline) {
-      showWaiting('Aguardando o broadcaster', 'A transmissão começa assim que ele entrar na sala');
+      showWaiting('Aguardando quem vai transmitir', 'A transmissão começa assim que a pessoa entrar na sala');
     } else if (!streaming) {
-      showWaiting('Aguardando a transmissão', 'O broadcaster ainda não começou a compartilhar a tela');
+      showWaiting('Aguardando a transmissão', 'A sala está aberta, mas a tela ainda não foi compartilhada');
     } else if (!peerConnection || peerConnection.connectionState !== 'connected') {
-      showWaiting('Conectando à transmissão...', 'Estabelecendo conexão com o broadcaster');
+      showWaiting('Conectando à transmissão...', 'Estabelecendo conexão direta com quem transmite');
       scheduleRecovery();
     }
   });
@@ -415,7 +415,7 @@ socket.on('connect', () => {
 
 socket.on('disconnect', (reason) => {
   if (!hasEnded && reason !== 'io client disconnect') {
-    showToast('Conexão com o servidor perdida, reconectando...', '⚠️');
+    showToast('Conexão com o servidor perdida, reconectando...', 'warning');
   }
 });
 
@@ -439,9 +439,9 @@ socket.on('stream-state', ({ streaming: isStreaming }) => {
     stopRecovery();
     remoteVideo.srcObject = null;
     wasConnected = false;
-    showWaiting('Transmissão pausada', 'O broadcaster parou de compartilhar a tela. Aguarde...');
+    showWaiting('Transmissão pausada', 'A tela deixou de ser compartilhada. Aguarde que ela volte.');
   } else if (!peerConnection || peerConnection.connectionState !== 'connected') {
-    showWaiting('Conectando à transmissão...', 'Estabelecendo conexão com o broadcaster');
+    showWaiting('Conectando à transmissão...', 'Estabelecendo conexão direta com quem transmite');
     recoveryAttempts = 0;
     scheduleRecovery();
   }
@@ -451,12 +451,12 @@ socket.on('stream-state', ({ streaming: isStreaming }) => {
 socket.on('broadcaster-disconnected', () => {
   broadcasterOnline = false;
   stopRecovery();
-  showToast('O broadcaster perdeu a conexão. Aguardando retorno...', '⚠️');
+  showToast('Quem transmite perdeu a conexão. Aguardando retorno...', 'warning');
 });
 
 socket.on('broadcaster-reconnected', () => {
   broadcasterOnline = true;
-  showToast('O broadcaster voltou', '✅');
+  showToast('A transmissão voltou', 'success');
 });
 
 // Broadcaster left

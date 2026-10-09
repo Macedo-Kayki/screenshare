@@ -46,6 +46,7 @@ const btnStop = document.getElementById('btn-stop');
 const roomCodeEl = document.getElementById('room-code');
 const userList = document.getElementById('user-list');
 const viewerCountEl = document.getElementById('viewer-count');
+const dockStatus = document.getElementById('dock-status');
 
 // Set room code
 roomCodeEl.textContent = roomId;
@@ -109,11 +110,16 @@ document.querySelectorAll('.toggle-group[data-setting]').forEach(group => {
 
 renderSettings();
 
+function setDockStatus(isLive) {
+  dockStatus.classList.toggle('is-live', isLive);
+  dockStatus.textContent = isLive ? 'Transmitindo' : 'Fora do ar';
+}
+
 // ===== CAPTURE SCREEN =====
 async function startBroadcast() {
   if (stream || isFatal) return;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-    showToast('Seu navegador não suporta compartilhamento de tela', '❌');
+    showToast('Seu navegador não suporta compartilhamento de tela', 'error');
     return;
   }
 
@@ -151,15 +157,16 @@ async function startBroadcast() {
 
     // Check if audio was captured from screen share
     if (stream.getAudioTracks().length > 0) {
-      showToast('Tela + áudio capturados!', '🔊');
+      showToast('Tela + áudio capturados!', 'success');
     } else {
-      showToast('Transmitindo sem áudio. Compartilhe uma aba e marque "Compartilhar áudio" para incluir som.', '⚠️');
+      showToast('Transmitindo sem áudio. Compartilhe uma aba e marque "Compartilhar áudio" para incluir som.', 'warning');
     }
 
     preview.srcObject = stream;
     preview.hidden = false;
     placeholder.hidden = true;
     liveBadge.hidden = false;
+    setDockStatus(true);
     qualityBadge.hidden = false;
     btnStart.hidden = true;
     btnStop.hidden = false;
@@ -176,7 +183,7 @@ async function startBroadcast() {
   } catch (err) {
     console.error('Capture error:', err);
     if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
-      showToast('Erro ao capturar tela', '❌');
+      showToast('Erro ao capturar tela', 'error');
     }
   } finally {
     btnStart.disabled = false;
@@ -193,6 +200,7 @@ function stopBroadcast({ silent = false } = {}) {
   preview.hidden = true;
   placeholder.hidden = false;
   liveBadge.hidden = true;
+  setDockStatus(false);
   qualityBadge.hidden = true;
   btnStart.hidden = false;
   btnStop.hidden = true;
@@ -200,7 +208,7 @@ function stopBroadcast({ silent = false } = {}) {
   closeAllPeers();
   socket.emit('stream-state', { streaming: false });
 
-  if (!silent) showToast('Transmissão encerrada', '⏹️');
+  if (!silent) showToast('Transmissão encerrada', 'info');
 }
 
 function applyContentHint() {
@@ -311,7 +319,7 @@ function scheduleReconnect(viewerId) {
   if (attempt > MAX_RETRIES) {
     closePeer(viewerId);
     setViewerStats(viewerId, 'sem conexão');
-    showToast('Não foi possível conectar a um espectador (rede bloqueada?)', '⚠️');
+    showToast('Não foi possível conectar a um espectador (rede bloqueada?)', 'warning');
     return;
   }
   retries.set(viewerId, attempt);
@@ -452,7 +460,7 @@ socket.on('connect', () => {
 
 socket.on('disconnect', (reason) => {
   if (!isFatal && reason !== 'io client disconnect') {
-    showToast('Conexão com o servidor perdida, reconectando...', '⚠️');
+    showToast('Conexão com o servidor perdida, reconectando...', 'warning');
   }
 });
 
@@ -464,7 +472,7 @@ socket.on('session-replaced', () => {
 
 // New viewer wants to connect
 socket.on('viewer-joined', ({ id, name }) => {
-  showToast(`${name} entrou na sala`, '👋');
+  showToast(`${name} entrou na sala`, 'join');
   viewers.add(id);
   if (stream && !peers.has(id)) connectToViewer(id);
 });
@@ -517,7 +525,7 @@ socket.on('ice-candidate', async ({ from, candidate, session }) => {
 
 // Viewer left
 socket.on('viewer-left', ({ id, name }) => {
-  showToast(`${name} saiu da sala`, '👋');
+  showToast(`${name} saiu da sala`, 'leave');
   viewers.delete(id);
   retries.delete(id);
   closePeer(id);
@@ -562,7 +570,7 @@ document.getElementById('btn-fullscreen').addEventListener('click', () => {
   if (document.fullscreenElement) {
     document.exitFullscreen();
   } else if (container.requestFullscreen) {
-    container.requestFullscreen().catch(() => showToast('Tela cheia não disponível', '❌'));
+    container.requestFullscreen().catch(() => showToast('Tela cheia não disponível', 'error'));
   }
 });
 
