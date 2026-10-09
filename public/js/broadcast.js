@@ -43,6 +43,7 @@ const liveBadge = document.getElementById('live-badge');
 const qualityBadge = document.getElementById('quality-badge');
 const btnStart = document.getElementById('btn-start');
 const btnStop = document.getElementById('btn-stop');
+const btnSwitch = document.getElementById('btn-switch');
 const roomCodeEl = document.getElementById('room-code');
 const userList = document.getElementById('user-list');
 const viewerCountEl = document.getElementById('viewer-count');
@@ -116,6 +117,29 @@ function setDockStatus(isLive) {
 }
 
 // ===== CAPTURE SCREEN =====
+function captureScreen() {
+  const res = RESOLUTION_PRESETS[currentSettings.resolution];
+  return navigator.mediaDevices.getDisplayMedia({
+    video: {
+      width: { ideal: res.width, max: res.width },
+      height: { ideal: res.height, max: res.height },
+      frameRate: { ideal: currentSettings.fps, max: currentSettings.fps }
+    },
+    audio: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      sampleRate: 48000,
+      channelCount: 2 // Request stereo audio
+    },
+    preferCurrentTab: false,
+    // Evita o efeito "espelho infinito" ao compartilhar a própria aba
+    selfBrowserSurface: 'exclude',
+    systemAudio: 'include',
+    surfaceSwitching: 'include'
+  });
+}
+
 async function startBroadcast() {
   if (stream || isFatal) return;
   if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
@@ -125,28 +149,7 @@ async function startBroadcast() {
 
   btnStart.disabled = true;
   try {
-    const res = RESOLUTION_PRESETS[currentSettings.resolution];
-
-    // Step 1: Capture screen with audio
-    const captured = await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        width: { ideal: res.width, max: res.width },
-        height: { ideal: res.height, max: res.height },
-        frameRate: { ideal: currentSettings.fps, max: currentSettings.fps }
-      },
-      audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-        sampleRate: 48000,
-        channelCount: 2 // Request stereo audio
-      },
-      preferCurrentTab: false,
-      // Evita o efeito "espelho infinito" ao compartilhar a própria aba
-      selfBrowserSurface: 'exclude',
-      systemAudio: 'include',
-      surfaceSwitching: 'include'
-    });
+    const captured = await captureScreen();
 
     if (isFatal) {
       captured.getTracks().forEach(track => track.stop());
@@ -170,6 +173,7 @@ async function startBroadcast() {
     qualityBadge.hidden = false;
     btnStart.hidden = true;
     btnStop.hidden = false;
+    btnSwitch.hidden = false;
 
     // Handle stream end (usuário clicou em "Parar compartilhamento" do navegador)
     stream.getVideoTracks()[0].addEventListener('ended', () => stopBroadcast());
@@ -204,11 +208,72 @@ function stopBroadcast({ silent = false } = {}) {
   qualityBadge.hidden = true;
   btnStart.hidden = false;
   btnStop.hidden = true;
+  btnSwitch.hidden = true;
 
   closeAllPeers();
   socket.emit('stream-state', { streaming: false });
 
   if (!silent) showToast('Transmissão encerrada', 'info');
+}
+
+// Troca a fonte compartilhada sem derrubar as conexões existentes
+async function switchScreen() {
+  if (!stream || isFatal) return;
+
+  btnSwitch.disabled = true;
+  let next;
+  try {
+    next = await captureScreen();
+  } catch (err) {
+    // Usuário cancelou o seletor: mantém a tela atual
+    if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+      console.error('Switch error:', err);
+      showToast('Erro ao trocar de tela', 'error');
+    }
+    btnSwitch.disabled = false;
+    return;
+  }
+
+  if (isFatal || !stream) {
+    next.getTracks().forEach(track => track.stop());
+    btnSwitch.disabled = false;
+    return;
+  }
+
+  const previous = stream;
+  const hadAudio = previous.getAudioTracks().length > 0;
+  const hasAudio = next.getAudioTracks().length > 0;
+  const newVideo = next.getVideoTracks()[0];
+  const newAudio = next.getAudioTracks()[0] || null;
+
+  stream = next;
+  applyContentHint();
+  preview.srcObject = stream;
+  newVideo.addEventListener('ended', () => stopBroadcast());
+
+  if (hadAudio !== hasAudio) {
+    // Ganhou ou perdeu áudio: o número de faixas mudou, então renegocia
+    closeAllPeers();
+    viewers.forEach(viewerId => connectToViewer(viewerId));
+  } else {
+    // Mesma composição de faixas: troca no lugar, sem renegociar (instantâneo)
+    for (const peer of peers.values()) {
+      if (!peer.pc) continue;
+      for (const sender of peer.pc.getSenders()) {
+        if (!sender.track) continue;
+        if (sender.track.kind === 'video') {
+          await sender.replaceTrack(newVideo).catch(e => console.warn('replace video track:', e));
+        } else if (sender.track.kind === 'audio' && newAudio) {
+          await sender.replaceTrack(newAudio).catch(e => console.warn('replace audio track:', e));
+        }
+      }
+      applyEncodingParams(peer.pc);
+    }
+  }
+
+  previous.getTracks().forEach(track => track.stop());
+  showToast(hasAudio ? 'Tela trocada, com áudio' : 'Tela trocada', 'success');
+  btnSwitch.disabled = false;
 }
 
 function applyContentHint() {
@@ -556,6 +621,7 @@ socket.on('room-users', (users) => {
 // ===== UI EVENTS =====
 btnStart.addEventListener('click', startBroadcast);
 btnStop.addEventListener('click', () => stopBroadcast());
+btnSwitch.addEventListener('click', switchScreen);
 
 document.getElementById('btn-copy-code').addEventListener('click', () => {
   copyToClipboard(roomId, 'Código copiado!');
