@@ -869,6 +869,14 @@ body {
   -webkit-mask-image: radial-gradient(ellipse 70% 60% at 30% 40%, #000 30%, transparent 75%);
   mask-image: radial-gradient(ellipse 70% 60% at 30% 40%, #000 30%, transparent 75%);
   pointer-events: none;
+  animation: grid-drift 9s linear infinite;
+}
+
+/* A grade desliza uma célula inteira por ciclo, então o loop não tem emenda */
+@keyframes grid-drift {
+  to {
+    background-position: 36px 36px, 36px 36px;
+  }
 }
 
 .page-home .topbar {
@@ -891,31 +899,6 @@ body {
   align-items: center;
 }
 
-.eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 22px;
-  padding: 5px 12px 5px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-full);
-  background: var(--surface);
-  font-family: var(--mono);
-  font-size: 11.5px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-2);
-}
-
-.eyebrow .tally {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--live);
-  box-shadow: 0 0 0 3px rgba(229, 55, 45, 0.2);
-  animation: blink 1.6s ease-in-out infinite;
-}
-
 .home-title {
   font-size: clamp(38px, 5.4vw, 64px);
   font-weight: 650;
@@ -928,6 +911,33 @@ body {
 .home-title em {
   font-style: normal;
   color: var(--accent-text);
+  animation: live-glow 3.2s ease-in-out 1.2s infinite alternate;
+}
+
+/* Cada palavra vira um bloco para poder entrar com deslocamento (js/home-intro.js) */
+.home-title .word {
+  display: inline-block;
+}
+
+@keyframes live-glow {
+  from {
+    text-shadow: 0 0 0 transparent;
+  }
+  to {
+    text-shadow: 0 0 22px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+}
+
+/* Esconde título e subtítulo até o GSAP assumir, evitando um "piscar" antes da entrada */
+.home-intro .home-title,
+.home-intro .home-lead,
+.home-intro .step {
+  visibility: hidden;
+}
+
+/* O card só fica transparente: com visibility o campo de nome perderia o foco inicial */
+.home-intro .home-card {
+  opacity: 0;
 }
 
 .home-lead {
@@ -1595,10 +1605,6 @@ kbd {
 
   .home-hero {
     display: contents;
-  }
-
-  .eyebrow {
-    align-self: flex-start;
   }
 
   .home-card {

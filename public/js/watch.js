@@ -4,11 +4,11 @@ const params = new URLSearchParams(window.location.search);
 const roomId = (params.get('room') || '').toUpperCase();
 const userName = (params.get('name') || '').trim();
 
-// Sem nome (ex.: link compartilhado direto): manda para a home com o código preenchido
+// Sem nome válido (ex.: link compartilhado direto): manda para a home com o código preenchido
 let redirectTo = null;
 if (!/^[A-Z0-9]{6}$/.test(roomId)) {
   redirectTo = '/';
-} else if (!userName) {
+} else if (!hasMinNameLetters(userName)) {
   redirectTo = `/?room=${roomId}`;
 }
 

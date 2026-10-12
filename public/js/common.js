@@ -165,6 +165,13 @@ function showToast(message, type = 'info') {
   }, duration);
 }
 
+// Mesma regra do servidor: conta só letras (com acento), não números nem símbolos
+const MIN_NAME_LETTERS = 3;
+
+function hasMinNameLetters(name) {
+  return (String(name || '').match(/\p{L}/gu) || []).length >= MIN_NAME_LETTERS;
+}
+
 function getInitials(name) {
   const initials = String(name || '')
     .trim()

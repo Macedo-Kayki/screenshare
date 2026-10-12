@@ -13,6 +13,7 @@ const ROOM_CLAIM_TIMEOUT = 60 * 1000;
 const BROADCASTER_GRACE_PERIOD = 20 * 1000;
 
 const ROOM_CODE_REGEX = /^[A-Z0-9]{6}$/;
+const MIN_NAME_LETTERS = 3;
 const VALID_SETTINGS = {
   resolution: ['480p', '720p', '1080p'],
   fps: [15, 30, 60],
@@ -95,7 +96,9 @@ function generateRoomCode() {
 function sanitizeName(name, fallback) {
   if (typeof name !== 'string') return fallback;
   const clean = name.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 30);
-  return clean || fallback;
+  // Mínimo de 3 letras (a home já bloqueia; aqui cobre clientes que pulam a validação)
+  const letters = (clean.match(/\p{L}/gu) || []).length;
+  return letters >= MIN_NAME_LETTERS ? clean : fallback;
 }
 
 function isValidRoomId(roomId) {

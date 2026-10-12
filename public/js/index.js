@@ -96,6 +96,10 @@ function getName() {
     markInvalid(usernameInput, 'Digite seu nome');
     return null;
   }
+  if (!hasMinNameLetters(name)) {
+    markInvalid(usernameInput, `O nome precisa ter pelo menos ${MIN_NAME_LETTERS} letras`);
+    return null;
+  }
   storageSet('localStorage', 'ss-name', name);
   return name;
 }
